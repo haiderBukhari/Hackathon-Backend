@@ -361,6 +361,30 @@ app.put('/courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
     res.status(200).json({ message: 'Video updated successfully', video: updatedVideo[0] });
 });
 
+app.get('/courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
+    const { courseId, videoId } = req.params;
+  
+    try {
+      // Optional: You can verify tutor ownership here like in other routes if needed
+  
+      const { data: video, error } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', videoId)
+        .eq('course_id', courseId)
+        .single();
+  
+      if (error || !video) {
+        return res.status(404).json({ error: 'Video not found for this course' });
+      }
+  
+      res.status(200).json(video);
+    } catch (err) {
+      console.error('Error fetching video:', err.message);
+      res.status(500).json({ error: 'Failed to retrieve video' });
+    }
+  });
+  
 // app.post('/transcribe/:videoId', upload.single('video'), async (req, res) => {
 //     const { videoId } = req.params;
 
