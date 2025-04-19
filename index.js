@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
+import bcrypt from 'bcrypt';
 import { createClient } from '@supabase/supabase-js';
 
 config();
@@ -15,8 +16,8 @@ app.use(express.json());
 app.use(cors({ origin: '*' }));
 
 const PORT = process.env.PORT || 3000;
+const SALT_ROUNDS = 10;
 
-// 👤 Sign Up Route
 app.post('/signup', async (req, res) => {
   const { email, password, full_name, role } = req.body;
 
@@ -24,31 +25,35 @@ app.post('/signup', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password
-  });
+  // Check if user already exists
+  const { data: existingUser } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .single();
 
-  if (authError) {
-    return res.status(400).json({ error: authError.message });
+  if (existingUser) {
+    return res.status(409).json({ error: 'User already exists with this email' });
   }
 
-  const userId = authData.user?.id;
+  // Hash the password
+  const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-  const { error: insertError } = await supabase.from('users').insert([
+  // Insert user
+  const { data, error } = await supabase.from('users').insert([
     {
-      id: userId,
       email,
       full_name,
+      password: hashedPassword,
       role
     }
   ]);
 
-  if (insertError) {
-    return res.status(500).json({ error: insertError.message });
+  if (error) {
+    return res.status(500).json({ error: error.message });
   }
 
-  res.status(200).json({ message: 'Signup successful! Please verify your email.', user: authData.user });
+  res.status(200).json({ message: 'Signup successful' });
 });
 
 app.post('/login', async (req, res) => {
@@ -58,19 +63,30 @@ app.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Email and password required' });
   }
 
-  const { data: sessionData, error: loginError } = await supabase.auth.signInWithPassword({
-    email,
-    password
-  });
+  // Fetch user by email
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, email, full_name, password, role')
+    .eq('email', email)
+    .single();
 
-  if (loginError) {
-    return res.status(401).json({ error: loginError.message });
+  if (error || !user) {
+    return res.status(401).json({ error: 'Invalid email or password' });
   }
+
+  // Compare passwords
+  const isMatch = await bcrypt.compare(password, user.password);
+
+  if (!isMatch) {
+    return res.status(401).json({ error: 'Invalid email or password' });
+  }
+
+  // Remove password before sending response
+  const { password: _, ...safeUser } = user;
 
   res.status(200).json({
     message: 'Login successful',
-    session: sessionData.session,
-    user: sessionData.user
+    user: safeUser
   });
 });
 
