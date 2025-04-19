@@ -106,14 +106,17 @@ app.post('/courses', verifyToken, async (req, res) => {
         return res.status(403).json({ error: 'Only tutors can create courses' });
     }
 
-    const { data, error } = await supabase.from('courses').insert([
-        {
-            title,
-            description,
-            thumbnail_url,
-            tutor_id: req.user.id
-        }
-    ]);
+    const { data, error } = await supabase
+    .from('courses')
+    .insert([
+      {
+        title,
+        description,
+        thumbnail_url,
+        tutor_id: req.user.id
+      }
+    ])
+    .select(); // This tells Supabase to return the inserted row(s)
 
     if (error) {
         return res.status(500).json({ error: error.message });
