@@ -229,7 +229,7 @@ app.delete('/courses/:id', verifyToken, async (req, res) => {
 
 app.post('/courses/:courseId/videos', verifyToken, async (req, res) => {
     const { courseId } = req.params;
-    const { title, video_url, order_index } = req.body;
+    const { title, video_url, order_index, transcript } = req.body;
 
     // Verify ownership of the course
     const { data: course, error: fetchError } = await supabase
@@ -253,6 +253,7 @@ app.post('/courses/:courseId/videos', verifyToken, async (req, res) => {
                 title,
                 video_url,
                 order_index,
+                transcript,
                 course_id: courseId
             }
         ])
