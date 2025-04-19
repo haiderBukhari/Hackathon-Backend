@@ -99,4 +99,128 @@ app.post('/login', async (req, res) => {
 });
 
 
+app.post('/', verifyToken, async (req, res) => {
+    const { title, description, thumbnail_url } = req.body;
+
+    if (req.user.role !== 'tutor') {
+        return res.status(403).json({ error: 'Only tutors can create courses' });
+    }
+
+    const { data, error } = await supabase.from('courses').insert([
+        {
+            title,
+            description,
+            thumbnail_url,
+            tutor_id: req.user.id
+        }
+    ]);
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.status(201).json({ message: 'Course created', course: data[0] });
+});
+
+// 📌 READ all courses by tutor
+app.get('/mine', verifyToken, async (req, res) => {
+    if (req.user.role !== 'tutor') {
+        return res.status(403).json({ error: 'Only tutors can view their courses' });
+    }
+
+    const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('tutor_id', req.user.id);
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.status(200).json(data);
+});
+
+// 📌 READ course by ID
+app.get('/:id', verifyToken, async (req, res) => {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+    if (error || !data) {
+        return res.status(404).json({ error: 'Course not found' });
+    }
+
+    res.status(200).json(data);
+});
+
+app.put('/:id', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    const { title, description, thumbnail_url } = req.body;
+
+    const { data: existing, error: fetchError } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+    if (fetchError || !existing) {
+        return res.status(404).json({ error: 'Course not found' });
+    }
+
+    if (existing.tutor_id !== req.user.id) {
+        return res.status(403).json({ error: 'You are not the owner of this course' });
+    }
+
+    const { data, error } = await supabase
+        .from('courses')
+        .update({
+            title,
+            description,
+            thumbnail_url
+        })
+        .eq('id', id)
+        .select();
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.status(200).json({ message: 'Course updated', course: data[0] });
+});
+
+// 📌 DELETE course
+app.delete('/:id', verifyToken, async (req, res) => {
+    const { id } = req.params;
+
+    const { data: existing, error: fetchError } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+    if (fetchError || !existing) {
+        return res.status(404).json({ error: 'Course not found' });
+    }
+
+    if (existing.tutor_id !== req.user.id) {
+        return res.status(403).json({ error: 'You are not the owner of this course' });
+    }
+
+    const { error } = await supabase
+        .from('courses')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.status(200).json({ message: 'Course deleted successfully' });
+});
+
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
