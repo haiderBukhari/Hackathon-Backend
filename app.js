@@ -497,4 +497,78 @@ app.get('/courses/:courseId/students', verifyToken, async (req, res) => {
     }
 });
 
+app.get('/tutor/enrollment-stats', verifyToken, async (req, res) => {
+    const tutorId = req.user.id;
+
+    try {
+        // Step 1: Get tutor's courses
+        const { data: courses, error: courseError } = await supabase
+            .from('courses')
+            .select('id, title')
+            .eq('tutor_id', tutorId);
+
+        if (courseError) {
+            return res.status(500).json({ error: courseError.message });
+        }
+
+        const courseIds = courses.map(course => course.id);
+        if (courseIds.length === 0) {
+            return res.status(200).json({
+                total_students_enrolled: 0,
+                recent_enrollments: [],
+            });
+        }
+
+        // Step 2: Get total enrollment count
+        const { count: totalCount, error: totalCountError } = await supabase
+            .from('enrollments')
+            .select('*', { count: 'exact', head: true })
+            .in('course_id', courseIds);
+
+        if (totalCountError) {
+            return res.status(500).json({ error: totalCountError.message });
+        }
+
+        // Step 3: Get enrollments in last 7 days
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+        const { data: recentEnrollments, error: recentError } = await supabase
+            .from('enrollments')
+            .select('id, course_id, enrolled_at')
+            .in('course_id', courseIds)
+            .gte('enrolled_at', sevenDaysAgo);
+
+        if (recentError) {
+            return res.status(500).json({ error: recentError.message });
+        }
+
+        // Step 4: Map recent enrollments per course
+        const enrollmentMap = {};
+        courses.forEach(course => {
+            enrollmentMap[course.id] = {
+                course_id: course.id,
+                title: course.title,
+                recent_enrollments: 0,
+            };
+        });
+
+        recentEnrollments.forEach(enrollment => {
+            if (enrollmentMap[enrollment.course_id]) {
+                enrollmentMap[enrollment.course_id].recent_enrollments += 1;
+            }
+        });
+
+        const recent_enrollments = Object.values(enrollmentMap);
+
+        // ✅ Final response
+        res.status(200).json({
+            total_students_enrolled: totalCount,
+            recent_enrollments,
+        });
+    } catch (err) {
+        console.error('Error fetching tutor enrollment stats:', err.message);
+        res.status(500).json({ error: 'Failed to fetch enrollment stats' });
+    }
+});
+
 export default app;
