@@ -57,42 +57,46 @@ app.post('/signup', async (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password required' });
-  }
-
-  const { data: user, error } = await supabase
-    .from('users')
-    .select('id, email, full_name, password, role')
-    .eq('email', email)
-    .single();
-
-  if (error || !user) {
-    return res.status(401).json({ error: 'Invalid email or password' });
-  }
-
-  const isMatch = await bcrypt.compare(password, user.password);
-
-  if (!isMatch) {
-    return res.status(401).json({ error: 'Invalid email or password' });
-  }
-
-  // Generate JWT
-  const token = jwt.sign(
-    { id: user.id, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_EXPIRES_IN }
-  );
-
-  const { password: _, ...safeUser } = user;
-
-  res.status(200).json({
-    message: 'Login successful',
-    token,
-    user: safeUser
+    const { email, password } = req.body;
+  
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+  
+    const { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('id, email, full_name, password, role')
+      .eq('email', email)
+      .single();
+  
+    if (fetchError) {
+      return res.status(500).json({ error: fetchError.message });
+    }
+  
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+  
+    const isMatch = await bcrypt.compare(password, user.password);
+  
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+  
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+  
+    const { password: _, ...safeUser } = user;
+  
+    res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: safeUser
+    });
   });
-});
+  
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
