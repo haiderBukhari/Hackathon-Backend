@@ -222,7 +222,6 @@ app.delete('/courses/:id', verifyToken, async (req, res) => {
     res.status(200).json({ message: 'Course deleted successfully' });
 });
 
-
 app.post('/courses/:courseId/videos', verifyToken, async (req, res) => {
     const { courseId } = req.params;
     const { title, video_url, order_index } = req.body;
@@ -261,8 +260,7 @@ app.post('/courses/:courseId/videos', verifyToken, async (req, res) => {
     res.status(201).json({ message: 'Video added successfully', video: data[0] });
 });
 
-// 📌 GET All Videos for a Course
-app.get('courses/:courseId/videos', verifyToken, async (req, res) => {
+app.get('/courses/:courseId/videos', verifyToken, async (req, res) => {
     const { courseId } = req.params;
 
     const { data, error } = await supabase
@@ -278,8 +276,7 @@ app.get('courses/:courseId/videos', verifyToken, async (req, res) => {
     res.status(200).json({ videos: data });
 });
 
-// 📌 DELETE a Video by ID (for tutors only)
-app.delete('courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
+app.delete('/courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
     const { courseId, videoId } = req.params;
 
     // Verify ownership of the course
@@ -310,7 +307,7 @@ app.delete('courses/:courseId/videos/:videoId', verifyToken, async (req, res) =>
     res.status(200).json({ message: 'Video deleted successfully' });
 });
 
-app.put('courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
+app.put('/courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
     const { courseId, videoId } = req.params;
     const { title, video_url, order_index } = req.body;
   
@@ -358,6 +355,5 @@ app.put('courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
   
     res.status(200).json({ message: 'Video updated successfully', video: updatedVideo[0] });
   });
-  
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
