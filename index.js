@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from 'dotenv';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 
 config();
@@ -17,6 +18,8 @@ app.use(cors({ origin: '*' }));
 
 const PORT = process.env.PORT || 3000;
 const SALT_ROUNDS = 10;
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 
 app.post('/signup', async (req, res) => {
   const { email, password, full_name, role } = req.body;
@@ -25,7 +28,6 @@ app.post('/signup', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  // Check if user already exists
   const { data: existingUser } = await supabase
     .from('users')
     .select('id')
@@ -36,10 +38,8 @@ app.post('/signup', async (req, res) => {
     return res.status(409).json({ error: 'User already exists with this email' });
   }
 
-  // Hash the password
   const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-  // Insert user
   const { data, error } = await supabase.from('users').insert([
     {
       email,
@@ -63,7 +63,6 @@ app.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Email and password required' });
   }
 
-  // Fetch user by email
   const { data: user, error } = await supabase
     .from('users')
     .select('id, email, full_name, password, role')
@@ -74,18 +73,24 @@ app.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  // Compare passwords
   const isMatch = await bcrypt.compare(password, user.password);
 
   if (!isMatch) {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  // Remove password before sending response
+  // Generate JWT
+  const token = jwt.sign(
+    { id: user.id, role: user.role },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN }
+  );
+
   const { password: _, ...safeUser } = user;
 
   res.status(200).json({
     message: 'Login successful',
+    token,
     user: safeUser
   });
 });
