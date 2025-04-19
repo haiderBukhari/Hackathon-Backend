@@ -5,6 +5,9 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
 import { verifyToken } from './middleware/verifyUser.js';
+import multer from 'multer';
+import axios from 'axios';
+import FormData from 'form-data';
 
 config();
 
@@ -16,6 +19,8 @@ const supabase = createClient(
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: '*' }));
+
+const upload = multer({ dest: "uploads/" });
 
 const PORT = process.env.PORT || 3000;
 const SALT_ROUNDS = 10;
@@ -310,50 +315,99 @@ app.delete('/courses/:courseId/videos/:videoId', verifyToken, async (req, res) =
 app.put('/courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
     const { courseId, videoId } = req.params;
     const { title, video_url, order_index } = req.body;
-  
+
     // Step 1: Verify that the course exists and belongs to this tutor
     const { data: course, error: courseError } = await supabase
-      .from('courses')
-      .select('tutor_id')
-      .eq('id', courseId)
-      .single();
-  
+        .from('courses')
+        .select('tutor_id')
+        .eq('id', courseId)
+        .single();
+
     if (courseError || !course) {
-      return res.status(404).json({ error: 'Course not found' });
+        return res.status(404).json({ error: 'Course not found' });
     }
-  
+
     if (course.tutor_id !== req.user.id) {
-      return res.status(403).json({ error: 'You do not own this course' });
+        return res.status(403).json({ error: 'You do not own this course' });
     }
-  
+
     // Step 2: Verify the video belongs to the course
     const { data: video, error: videoError } = await supabase
-      .from('videos')
-      .select('id')
-      .eq('id', videoId)
-      .eq('course_id', courseId)
-      .single();
-  
+        .from('videos')
+        .select('id')
+        .eq('id', videoId)
+        .eq('course_id', courseId)
+        .single();
+
     if (videoError || !video) {
-      return res.status(404).json({ error: 'Video not found for this course' });
+        return res.status(404).json({ error: 'Video not found for this course' });
     }
-  
+
     // Step 3: Update video
     const { data: updatedVideo, error: updateError } = await supabase
-      .from('videos')
-      .update({
-        title,
-        video_url,
-        order_index
-      })
-      .eq('id', videoId)
-      .select();
-  
+        .from('videos')
+        .update({
+            title,
+            video_url,
+            order_index
+        })
+        .eq('id', videoId)
+        .select();
+
     if (updateError) {
-      return res.status(500).json({ error: updateError.message });
+        return res.status(500).json({ error: updateError.message });
     }
-  
+
     res.status(200).json({ message: 'Video updated successfully', video: updatedVideo[0] });
-  });
+});
+
+app.post('/transcribe/:videoId', upload.single('video'), async (req, res) => {
+    const { videoId } = req.params;
+
+    if (!videoId) {
+        return res.status(400).json({ error: 'videoId is required in URL' });
+    }
+
+    try {
+        const filePath = req.file.path;
+
+        const formData = new FormData();
+        formData.append('file', fs.createReadStream(filePath));
+        formData.append('model', 'whisper-1');
+        formData.append('response_format', 'text');
+
+        const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+            headers: {
+                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                ...formData.getHeaders(),
+            },
+        });
+
+        const transcriptText = response.data;
+
+        // Insert into Supabase transcripts table
+        const { data, error } = await supabase.from('transcripts').insert([
+            {
+                video_id: videoId,
+                content: transcriptText,
+            },
+        ]);
+
+        fs.unlinkSync(filePath); // Clean up the file
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.status(200).json({
+            message: 'Transcription completed and saved',
+            transcript: transcriptText,
+            saved: data[0],
+        });
+    } catch (error) {
+        console.error('Error transcribing:', error.response?.data || error.message);
+        res.status(500).send('Transcription failed');
+    }
+});
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
