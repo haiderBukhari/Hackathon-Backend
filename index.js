@@ -20,7 +20,7 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: '*' }));
 
-const upload = multer({ dest: "uploads/" });
+// const upload = multer({ dest: "uploads/" });
 
 const PORT = process.env.PORT || 3000;
 const SALT_ROUNDS = 10;
@@ -361,53 +361,53 @@ app.put('/courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
     res.status(200).json({ message: 'Video updated successfully', video: updatedVideo[0] });
 });
 
-app.post('/transcribe/:videoId', upload.single('video'), async (req, res) => {
-    const { videoId } = req.params;
+// app.post('/transcribe/:videoId', upload.single('video'), async (req, res) => {
+//     const { videoId } = req.params;
 
-    if (!videoId) {
-        return res.status(400).json({ error: 'videoId is required in URL' });
-    }
+//     if (!videoId) {
+//         return res.status(400).json({ error: 'videoId is required in URL' });
+//     }
 
-    try {
-        const filePath = req.file.path;
+//     try {
+//         const filePath = req.file.path;
 
-        const formData = new FormData();
-        formData.append('file', fs.createReadStream(filePath));
-        formData.append('model', 'whisper-1');
-        formData.append('response_format', 'text');
+//         const formData = new FormData();
+//         formData.append('file', fs.createReadStream(filePath));
+//         formData.append('model', 'whisper-1');
+//         formData.append('response_format', 'text');
 
-        const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
-            headers: {
-                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                ...formData.getHeaders(),
-            },
-        });
+//         const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
+//             headers: {
+//                 Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+//                 ...formData.getHeaders(),
+//             },
+//         });
 
-        const transcriptText = response.data;
+//         const transcriptText = response.data;
 
-        // Insert into Supabase transcripts table
-        const { data, error } = await supabase.from('transcripts').insert([
-            {
-                video_id: videoId,
-                content: transcriptText,
-            },
-        ]);
+//         // Insert into Supabase transcripts table
+//         const { data, error } = await supabase.from('transcripts').insert([
+//             {
+//                 video_id: videoId,
+//                 content: transcriptText,
+//             },
+//         ]);
 
-        fs.unlinkSync(filePath); // Clean up the file
+//         fs.unlinkSync(filePath); // Clean up the file
 
-        if (error) {
-            return res.status(500).json({ error: error.message });
-        }
+//         if (error) {
+//             return res.status(500).json({ error: error.message });
+//         }
 
-        res.status(200).json({
-            message: 'Transcription completed and saved',
-            transcript: transcriptText,
-            saved: data[0],
-        });
-    } catch (error) {
-        console.error('Error transcribing:', error.response?.data || error.message);
-        res.status(500).send('Transcription failed');
-    }
-});
+//         res.status(200).json({
+//             message: 'Transcription completed and saved',
+//             transcript: transcriptText,
+//             saved: data[0],
+//         });
+//     } catch (error) {
+//         console.error('Error transcribing:', error.response?.data || error.message);
+//         res.status(500).send('Transcription failed');
+//     }
+// });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
