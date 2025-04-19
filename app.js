@@ -14,7 +14,7 @@ app.use(cors({ origin: '*' }));
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_ANON_KEY
-); 
+);
 const SALT_ROUNDS = 10;
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
@@ -470,5 +470,31 @@ app.delete('/student/unenroll/:courseId', verifyToken, async (req, res) => {
     res.status(200).json({ message: 'Unenrolled successfully' });
 });
 
+app.get('/courses/:courseId/students', verifyToken, async (req, res) => {
+    const { courseId } = req.params;
+
+    try {
+        const { data, error } = await supabase
+            .from('enrollments')
+            .select('id, student_id, enrolled_at, users(id, full_name, email)')
+            .eq('course_id', courseId);
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        const students = data.map(enrollment => ({
+            student_id: enrollment.student_id,
+            full_name: enrollment.users?.full_name || 'Unknown',
+            email: enrollment.users?.email || '',
+            enrolled_at: enrollment.enrolled_at,
+        }));
+
+        res.status(200).json({ students });
+    } catch (err) {
+        console.error('Error fetching enrolled students:', err.message);
+        res.status(500).json({ error: 'Failed to fetch enrolled students' });
+    }
+});
 
 export default app;
