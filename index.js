@@ -107,16 +107,16 @@ app.post('/courses', verifyToken, async (req, res) => {
     }
 
     const { data, error } = await supabase
-    .from('courses')
-    .insert([
-      {
-        title,
-        description,
-        thumbnail_url,
-        tutor_id: req.user.id
-      }
-    ])
-    .select(); // This tells Supabase to return the inserted row(s)
+        .from('courses')
+        .insert([
+            {
+                title,
+                description,
+                thumbnail_url,
+                tutor_id: req.user.id
+            }
+        ])
+        .select(); // This tells Supabase to return the inserted row(s)
 
     if (error) {
         return res.status(500).json({ error: error.message });
@@ -221,5 +221,143 @@ app.delete('/courses/:id', verifyToken, async (req, res) => {
 
     res.status(200).json({ message: 'Course deleted successfully' });
 });
+
+
+app.post('/courses/:courseId/videos', verifyToken, async (req, res) => {
+    const { courseId } = req.params;
+    const { title, video_url, order_index } = req.body;
+
+    // Verify ownership of the course
+    const { data: course, error: fetchError } = await supabase
+        .from('courses')
+        .select('tutor_id')
+        .eq('id', courseId)
+        .single();
+
+    if (fetchError || !course) {
+        return res.status(404).json({ error: 'Course not found' });
+    }
+
+    if (course.tutor_id !== req.user.id) {
+        return res.status(403).json({ error: 'You do not own this course' });
+    }
+
+    const { data, error } = await supabase
+        .from('videos')
+        .insert([
+            {
+                title,
+                video_url,
+                order_index,
+                course_id: courseId
+            }
+        ])
+        .select();
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.status(201).json({ message: 'Video added successfully', video: data[0] });
+});
+
+// 📌 GET All Videos for a Course
+app.get('courses/:courseId/videos', verifyToken, async (req, res) => {
+    const { courseId } = req.params;
+
+    const { data, error } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('course_id', courseId)
+        .order('order_index', { ascending: true });
+
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
+
+    res.status(200).json({ videos: data });
+});
+
+// 📌 DELETE a Video by ID (for tutors only)
+app.delete('courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
+    const { courseId, videoId } = req.params;
+
+    // Verify ownership of the course
+    const { data: course, error: fetchError } = await supabase
+        .from('courses')
+        .select('tutor_id')
+        .eq('id', courseId)
+        .single();
+
+    if (fetchError || !course) {
+        return res.status(404).json({ error: 'Course not found' });
+    }
+
+    if (course.tutor_id !== req.user.id) {
+        return res.status(403).json({ error: 'You do not own this course' });
+    }
+
+    const { error: deleteError } = await supabase
+        .from('videos')
+        .delete()
+        .eq('id', videoId)
+        .eq('course_id', courseId);
+
+    if (deleteError) {
+        return res.status(500).json({ error: deleteError.message });
+    }
+
+    res.status(200).json({ message: 'Video deleted successfully' });
+});
+
+app.put('courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
+    const { courseId, videoId } = req.params;
+    const { title, video_url, order_index } = req.body;
+  
+    // Step 1: Verify that the course exists and belongs to this tutor
+    const { data: course, error: courseError } = await supabase
+      .from('courses')
+      .select('tutor_id')
+      .eq('id', courseId)
+      .single();
+  
+    if (courseError || !course) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+  
+    if (course.tutor_id !== req.user.id) {
+      return res.status(403).json({ error: 'You do not own this course' });
+    }
+  
+    // Step 2: Verify the video belongs to the course
+    const { data: video, error: videoError } = await supabase
+      .from('videos')
+      .select('id')
+      .eq('id', videoId)
+      .eq('course_id', courseId)
+      .single();
+  
+    if (videoError || !video) {
+      return res.status(404).json({ error: 'Video not found for this course' });
+    }
+  
+    // Step 3: Update video
+    const { data: updatedVideo, error: updateError } = await supabase
+      .from('videos')
+      .update({
+        title,
+        video_url,
+        order_index
+      })
+      .eq('id', videoId)
+      .select();
+  
+    if (updateError) {
+      return res.status(500).json({ error: updateError.message });
+    }
+  
+    res.status(200).json({ message: 'Video updated successfully', video: updatedVideo[0] });
+  });
+  
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
