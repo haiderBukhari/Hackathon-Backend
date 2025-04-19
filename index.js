@@ -4,6 +4,7 @@ import { config } from 'dotenv';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createClient } from '@supabase/supabase-js';
+import { verifyToken } from './middleware/verifyUser.js';
 
 config();
 
@@ -98,8 +99,7 @@ app.post('/login', async (req, res) => {
     });
 });
 
-
-app.post('/', verifyToken, async (req, res) => {
+app.post('/courses', verifyToken, async (req, res) => {
     const { title, description, thumbnail_url } = req.body;
 
     if (req.user.role !== 'tutor') {
@@ -122,8 +122,7 @@ app.post('/', verifyToken, async (req, res) => {
     res.status(201).json({ message: 'Course created', course: data[0] });
 });
 
-// 📌 READ all courses by tutor
-app.get('/mine', verifyToken, async (req, res) => {
+app.get('/courses', verifyToken, async (req, res) => {
     if (req.user.role !== 'tutor') {
         return res.status(403).json({ error: 'Only tutors can view their courses' });
     }
@@ -140,8 +139,7 @@ app.get('/mine', verifyToken, async (req, res) => {
     res.status(200).json(data);
 });
 
-// 📌 READ course by ID
-app.get('/:id', verifyToken, async (req, res) => {
+app.get('/courses/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
 
     const { data, error } = await supabase
@@ -157,7 +155,7 @@ app.get('/:id', verifyToken, async (req, res) => {
     res.status(200).json(data);
 });
 
-app.put('/:id', verifyToken, async (req, res) => {
+app.put('/courses/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
     const { title, description, thumbnail_url } = req.body;
 
@@ -192,8 +190,7 @@ app.put('/:id', verifyToken, async (req, res) => {
     res.status(200).json({ message: 'Course updated', course: data[0] });
 });
 
-// 📌 DELETE course
-app.delete('/:id', verifyToken, async (req, res) => {
+app.delete('/courses/:id', verifyToken, async (req, res) => {
     const { id } = req.params;
 
     const { data: existing, error: fetchError } = await supabase
@@ -221,6 +218,5 @@ app.delete('/:id', verifyToken, async (req, res) => {
 
     res.status(200).json({ message: 'Course deleted successfully' });
 });
-
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
