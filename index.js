@@ -364,75 +364,118 @@ app.put('/courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
 
 app.get('/courses/:courseId/videos/:videoId', verifyToken, async (req, res) => {
     const { courseId, videoId } = req.params;
-  
+
     try {
-      // Optional: You can verify tutor ownership here like in other routes if needed
-  
-      const { data: video, error } = await supabase
-        .from('videos')
-        .select('*')
-        .eq('id', videoId)
+        // Optional: You can verify tutor ownership here like in other routes if needed
+
+        const { data: video, error } = await supabase
+            .from('videos')
+            .select('*')
+            .eq('id', videoId)
+            .eq('course_id', courseId)
+            .single();
+
+        if (error || !video) {
+            return res.status(404).json({ error: 'Video not found for this course' });
+        }
+
+        res.status(200).json(video);
+    } catch (err) {
+        console.error('Error fetching video:', err.message);
+        res.status(500).json({ error: 'Failed to retrieve video' });
+    }
+});
+
+app.get('/student/courses', verifyToken, async (req, res) => {
+    const studentId = req.user.id;
+
+    if (req.user.role !== 'student') {
+        return res.status(403).json({ error: 'Only students can view this list' });
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('courses')
+            .select(`
+          *,
+          enrollments!left(course_id,student_id,id)
+        `)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        // Enrich each course with isEnrolled = true/false
+        const result = data.map(course => ({
+            ...course,
+            isEnrolled: course.enrollments?.some(e => e.student_id === studentId) || false,
+        }));
+
+        res.status(200).json(result);
+    } catch (err) {
+        console.error('Error fetching student courses:', err.message);
+        res.status(500).json({ error: 'Failed to fetch courses' });
+    }
+});
+
+app.post('/student/enroll/:courseId', verifyToken, async (req, res) => {
+    const { courseId } = req.params;
+    const studentId = req.user.id;
+
+    if (req.user.role !== 'student') {
+        return res.status(403).json({ error: 'Only students can enroll' });
+    }
+
+    // Check if already enrolled
+    const { data: existingEnrollment } = await supabase
+        .from('enrollments')
+        .select('id')
+        .eq('student_id', studentId)
         .eq('course_id', courseId)
         .single();
-  
-      if (error || !video) {
-        return res.status(404).json({ error: 'Video not found for this course' });
-      }
-  
-      res.status(200).json(video);
-    } catch (err) {
-      console.error('Error fetching video:', err.message);
-      res.status(500).json({ error: 'Failed to retrieve video' });
+
+    if (existingEnrollment) {
+        return res.status(409).json({ message: 'Already enrolled in this course' });
     }
-  });
-  
-// app.post('/transcribe/:videoId', upload.single('video'), async (req, res) => {
-//     const { videoId } = req.params;
 
-//     if (!videoId) {
-//         return res.status(400).json({ error: 'videoId is required in URL' });
-//     }
+    // Enroll student
+    const { data, error } = await supabase
+        .from('enrollments')
+        .insert([
+            {
+                student_id: studentId,
+                course_id: courseId,
+            },
+        ])
+        .select();
 
-//     try {
-//         const filePath = req.file.path;
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
 
-//         const formData = new FormData();
-//         formData.append('file', fs.createReadStream(filePath));
-//         formData.append('model', 'whisper-1');
-//         formData.append('response_format', 'text');
+    res.status(201).json({ message: 'Enrolled successfully', enrollment: data[0] });
+});
+app.delete('/student/unenroll/:courseId', verifyToken, async (req, res) => {
+    const { courseId } = req.params;
+    const studentId = req.user.id;
 
-//         const response = await axios.post('https://api.openai.com/v1/audio/transcriptions', formData, {
-//             headers: {
-//                 Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-//                 ...formData.getHeaders(),
-//             },
-//         });
+    if (req.user.role !== 'student') {
+        return res.status(403).json({ error: 'Only students can unenroll' });
+    }
 
-//         const transcriptText = response.data;
+    // Delete the enrollment
+    const { error } = await supabase
+        .from('enrollments')
+        .delete()
+        .eq('student_id', studentId)
+        .eq('course_id', courseId);
 
-//         // Insert into Supabase transcripts table
-//         const { data, error } = await supabase.from('transcripts').insert([
-//             {
-//                 video_id: videoId,
-//                 content: transcriptText,
-//             },
-//         ]);
+    if (error) {
+        return res.status(500).json({ error: error.message });
+    }
 
-//         fs.unlinkSync(filePath); // Clean up the file
-
-//         if (error) {
-//             return res.status(500).json({ error: error.message });
-//         }
-
-//         res.status(200).json({
-//             message: 'Transcription completed and saved',
-//             transcript: transcriptText,
-//             saved: data[0],
-//         });
-//     } catch (error) {
-//         console.error('Error transcribing:', error.response?.data || error.message);
-//         res.status(500).send('Transcription failed');
-//     }
-// });
+    res.status(200).json({ message: 'Unenrolled successfully' });
+});
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
